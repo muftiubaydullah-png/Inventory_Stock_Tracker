@@ -1,0 +1,20 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<section class="card error-card">
+  <h1>{{ title }}</h1>
+  <p class="lead">{{ message }}</p>
+  {% if excel_problem %}
+  <div class="help-box">
+    <strong>How to fix it</strong>
+    <ol>
+      <li>Make sure <code>inventory.xlsx</code> is in the same folder as <code>app.py</code> (or set the <code>INVENTORY_FILE</code> variable).</li>
+      <li>Close the file in Excel if it is open.</li>
+      <li>Check that the first sheet has the 18 expected column headers in row 1.</li>
+      <li>Refresh this page.</li>
+    </ol>
+  </div>
+  {% endif %}
+  <p><a class="btn btn-primary" href="{{ url_for('dashboard') }}">Back to Dashboard</a></p>
+</section>
+{% endblock %}

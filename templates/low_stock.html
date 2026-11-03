@@ -1,0 +1,54 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Low Stock Alerts{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Low Stock Alerts</h1>
+    <p class="sub">Items at or below their reorder level need to be ordered. The “Watch list” shows items that are running down but not yet at that level.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('export_report', kind='low_stock') }}">Export to Excel</a>
+</div>
+
+<nav class="tabs" aria-label="Alert level">
+  <a href="{{ url_for('low_stock', level='all') }}" class="{{ 'active' if level == 'all' }}">Needs reorder <span class="count">{{ counts.all }}</span></a>
+  <a href="{{ url_for('low_stock', level='reorder') }}" class="{{ 'active' if level == 'reorder' }}">Reorder required <span class="count">{{ counts.reorder }}</span></a>
+  <a href="{{ url_for('low_stock', level='out') }}" class="{{ 'active' if level == 'out' }}">Out of stock <span class="count">{{ counts.out }}</span></a>
+  <a href="{{ url_for('low_stock', level='watch') }}" class="{{ 'active' if level == 'watch' }}">Watch list <span class="count">{{ counts.watch }}</span></a>
+</nav>
+
+<section class="card flush">
+  <div class="table-wrap">
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Item ID</th><th>Item Name</th>
+          <th class="num">Available Qty</th><th class="num">Reorder Level</th>
+          <th class="num">Suggested Order</th>
+          <th>Supplier</th><th>Status</th><th class="actions-col">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in items %}
+        <tr class="row-{{ r.status|badge }}">
+          <td class="mono">{{ r.item_id }}</td>
+          <td><span class="strong">{{ r.name }}</span><br><span class="muted small">{{ r.brand }} · {{ r.category }}</span></td>
+          <td class="num strong">{{ r.qty|num }}</td>
+          <td class="num">{{ r.reorder|num }}</td>
+          <td class="num">{{ r.suggested_order|num }}</td>
+          <td>{{ r.supplier }}</td>
+          <td>{{ m.badge(r.status) }}</td>
+          <td class="actions-col">
+            <a class="btn btn-small btn-primary" href="{{ url_for('update_stock', item_id=r.item_id) }}">Stock In</a>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="8" class="empty">No items in this list. 🎉</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-foot"><span class="muted small">{{ items|length }} item{{ '' if items|length == 1 else 's' }} · most urgent first</span></div>
+</section>
+{% endblock %}

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Dashboard</h1>
+    <p class="sub">A live summary of your electronics inventory.</p>
+  </div>
+  <a class="btn btn-ghost" href="{{ url_for('export_report', kind='all') }}">Export full report</a>
+</div>
+
+{# ---- Headline numbers ---- #}
+<section class="cards cards-3">
+  <div class="stat-card">
+    <span class="stat-icon teal"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span>
+    <div><p class="stat-label">Total inventory items</p><p class="stat-value">{{ stats.total_items|num }}</p></div>
+  </div>
+  <div class="stat-card">
+    <span class="stat-icon blue"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span>
+    <div><p class="stat-label">Total quantity in stock</p><p class="stat-value">{{ stats.total_qty|num }}</p></div>
+  </div>
+  <div class="stat-card">
+    <span class="stat-icon violet"><svg viewBox="0 0 24 24"><path d="M6 4h12M6 9h12M9 4c5 0 7 2 7 5s-2 5-7 5h-3l8 6"/></svg></span>
+    <div><p class="stat-label">Total inventory value</p>
+      <p class="stat-value" title="{{ stats.total_value|inr }}">{{ stats.total_value|inr_short }}</p></div>
+  </div>
+</section>
+
+{# ---- Status cards (each one opens the matching filtered list) ---- #}
+<section class="cards cards-4">
+  <a class="stat-card stat-link ok" href="{{ url_for('inventory', status='In Stock') }}">
+    <div><p class="stat-label">Items in stock</p><p class="stat-value">{{ stats.in_stock|num }}</p>
+      <p class="stat-note">Healthy stock levels</p></div>
+  </a>
+  <a class="stat-card stat-link low" href="{{ url_for('inventory', status='Low Stock') }}">
+    <div><p class="stat-label">Low-stock items</p><p class="stat-value">{{ stats.low_stock|num }}</p>
+      <p class="stat-note">Running down, within 2× reorder level</p></div>
+  </a>
+  <a class="stat-card stat-link reorder" href="{{ url_for('low_stock', level='reorder') }}">
+    <div><p class="stat-label">Items requiring reorder</p><p class="stat-value">{{ stats.reorder|num }}</p>
+      <p class="stat-note">At or below reorder level</p></div>
+  </a>
+  <a class="stat-card stat-link out" href="{{ url_for('low_stock', level='out') }}">
+    <div><p class="stat-label">Out-of-stock items</p><p class="stat-value">{{ stats.out_of_stock|num }}</p>
+      <p class="stat-note">Zero quantity</p></div>
+  </a>
+</section>
+
+{# ---- Charts ---- #}
+<section class="grid-2">
+  <div class="card">
+    <h2>Stock status</h2>
+    <div class="donut-wrap">
+      <div id="statusChart" class="donut" role="img" aria-label="Stock status distribution"></div>
+      <ul id="statusLegend" class="legend"></ul>
+    </div>
+  </div>
+  <div class="card">
+    <h2>Inventory value by category <span class="muted">(top 8)</span></h2>
+    <div id="categoryChart" class="hbars" role="img" aria-label="Stock value by category"></div>
+  </div>
+</section>
+
+{# ---- Most urgent items ---- #}
+<section class="card">
+  <div class="card-head">
+    <h2>Most urgent items</h2>
+    <a href="{{ url_for('low_stock') }}" class="link">View all alerts →</a>
+  </div>
+  {% if urgent %}
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Item ID</th><th>Item Name</th><th class="num">Quantity</th><th class="num">Reorder Level</th><th>Supplier</th><th>Status</th></tr></thead>
+      <tbody>
+      {% for r in urgent %}
+        <tr class="row-{{ r.status|badge }}">
+          <td class="mono">{{ r.item_id }}</td>
+          <td>{{ r.name }}</td>
+          <td class="num strong">{{ r.qty|num }}</td>
+          <td class="num">{{ r.reorder|num }}</td>
+          <td>{{ r.supplier }}</td>
+          <td>{{ m.badge(r.status) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <p class="empty">Nothing is at or below its reorder level. 🎉</p>
+  {% endif %}
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  // Data prepared by Flask, drawn by the small chart helpers in script.js
+  const chartData = {{ chart_data|tojson }};
+  drawDonut("statusChart", "statusLegend", chartData.status);
+  drawBars("categoryChart", chartData.categories, {money: true});
+</script>
+{% endblock %}

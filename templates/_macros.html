@@ -1,0 +1,54 @@
+{# Small reusable pieces shared by several pages #}
+
+{% macro badge(status) -%}
+<span class="badge {{ status|badge }}">{{ status }}</span>
+{%- endmacro %}
+
+{# A table header cell that sorts the table when clicked #}
+{% macro sort_th(label, column, sort, order, align='') -%}
+{% set is_active = (sort == column) %}
+{% set next_order = 'desc' if (is_active and order == 'asc') else 'asc' %}
+<th class="{{ align }} sortable {{ 'active' if is_active }}" aria-sort="{{ ('ascending' if order == 'asc' else 'descending') if is_active else 'none' }}">
+  <a href="{{ url_for('inventory', **qs(sort=column, order=next_order, page=1)) }}">
+    {{ label }}<span class="sort-arrow">{% if is_active %}{{ '▲' if order == 'asc' else '▼' }}{% else %}↕{% endif %}</span>
+  </a>
+</th>
+{%- endmacro %}
+
+{# Page number links #}
+{% macro pager(paging) -%}
+{% if paging.pages > 1 %}
+<nav class="pager" aria-label="Pagination">
+  {% if paging.page > 1 %}
+    <a class="page-btn" href="{{ url_for('inventory', **qs(page=paging.page - 1)) }}">‹ Prev</a>
+  {% else %}
+    <span class="page-btn disabled">‹ Prev</span>
+  {% endif %}
+  {% for n in paging.window %}
+    {% if n is none %}<span class="page-gap">…</span>
+    {% elif n == paging.page %}<span class="page-btn current" aria-current="page">{{ n }}</span>
+    {% else %}<a class="page-btn" href="{{ url_for('inventory', **qs(page=n)) }}">{{ n }}</a>{% endif %}
+  {% endfor %}
+  {% if paging.page < paging.pages %}
+    <a class="page-btn" href="{{ url_for('inventory', **qs(page=paging.page + 1)) }}">Next ›</a>
+  {% else %}
+    <span class="page-btn disabled">Next ›</span>
+  {% endif %}
+</nav>
+{% endif %}
+{%- endmacro %}
+
+{# Delete button + hidden form. The JS in script.js asks for confirmation. #}
+{% macro delete_button(item, next_url) -%}
+<form method="post" action="{{ url_for('delete_item', item_id=item.item_id) }}" class="inline-form js-delete-form"
+      data-name="{{ item.name }}" data-id="{{ item.item_id }}">
+  <input type="hidden" name="next" value="{{ next_url }}">
+  <button type="submit" class="btn btn-icon btn-danger-ghost" title="Delete {{ item.item_id }}" aria-label="Delete {{ item.name }}">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14M10 10v6M14 10v6"/></svg>
+  </button>
+</form>
+{%- endmacro %}
+
+{% macro field_error(errors, key) -%}
+{% if errors.get(key) %}<p class="field-error">{{ errors[key] }}</p>{% endif %}
+{%- endmacro %}

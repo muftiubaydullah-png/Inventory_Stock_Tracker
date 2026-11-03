@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}All Inventory{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>All Inventory</h1>
+    <p class="sub">
+      {% if paging.total %}Showing {{ paging.first|num }}–{{ paging.last|num }} of {{ paging.total|num }} items{% else %}No items match{% endif %}
+      {% if q or category or status %}<span class="muted"> · filtered</span>{% endif %}
+    </p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('add_item') }}">+ Add Item</a>
+</div>
+
+{# ---- Search + filters (a normal GET form, so every state is a shareable URL) ---- #}
+<form class="card filters" method="get" action="{{ url_for('inventory') }}" id="filterForm">
+  <div class="filter-search">
+    <label for="q">Search</label>
+    <input type="search" id="q" name="q" value="{{ q }}" placeholder="Item ID, name, category, brand or supplier">
+  </div>
+  <div>
+    <label for="category">Category</label>
+    <select id="category" name="category" class="js-autosubmit">
+      <option value="">All categories</option>
+      {% for c in categories %}<option value="{{ c }}" {{ 'selected' if c == category }}>{{ c }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="status">Stock status</label>
+    <select id="status" name="status" class="js-autosubmit">
+      <option value="">All statuses</option>
+      {% for s in statuses %}<option value="{{ s }}" {{ 'selected' if s == status }}>{{ s }}</option>{% endfor %}
+    </select>
+  </div>
+  <div>
+    <label for="per_page">Rows per page</label>
+    <select id="per_page" name="per_page" class="js-autosubmit">
+      {% for n in per_page_choices %}<option value="{{ n }}" {{ 'selected' if n == per_page }}>{{ n }}</option>{% endfor %}
+    </select>
+  </div>
+  <input type="hidden" name="sort" value="{{ sort }}">
+  <input type="hidden" name="order" value="{{ order }}">
+  <div class="filter-actions">
+    <button class="btn btn-primary" type="submit">Search</button>
+    {% if q or category or status %}<a class="btn btn-ghost" href="{{ url_for('inventory') }}">Clear</a>{% endif %}
+  </div>
+</form>
+
+<section class="card flush">
+  <div class="table-wrap">
+    <table class="table table-hover">
+      <thead>
+        <tr>
+          {{ m.sort_th('Item ID', 'item_id', sort, order) }}
+          {{ m.sort_th('Item Name', 'name', sort, order) }}
+          {{ m.sort_th('Category', 'category', sort, order) }}
+          {{ m.sort_th('Brand', 'brand', sort, order) }}
+          {{ m.sort_th('Quantity', 'qty', sort, order, 'num') }}
+          {{ m.sort_th('Unit Cost', 'cost', sort, order, 'num') }}
+          {{ m.sort_th('Stock Value', 'value', sort, order, 'num') }}
+          {{ m.sort_th('Stock Status', 'status', sort, order) }}
+          <th class="actions-col">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+      {% for r in rows %}
+        <tr>
+          <td class="mono">{{ r.item_id }}</td>
+          <td><span class="strong">{{ r.name }}</span>{% if r.spec %}<br><span class="muted small">{{ r.spec }}</span>{% endif %}</td>
+          <td>{{ r.category }}</td>
+          <td>{{ r.brand }}</td>
+          <td class="num strong">{{ r.qty|num }} <span class="muted small">{{ r.unit }}</span></td>
+          <td class="num">{{ r.cost|inr }}</td>
+          <td class="num">{{ r.value|inr }}</td>
+          <td>{{ m.badge(r.status) }}</td>
+          <td class="actions-col">
+            <a class="btn btn-icon" href="{{ url_for('edit_item', item_id=r.item_id) }}" title="Edit {{ r.item_id }}" aria-label="Edit {{ r.name }}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            </a>
+            <a class="btn btn-icon" href="{{ url_for('update_stock', item_id=r.item_id) }}" title="Update stock for {{ r.item_id }}" aria-label="Update stock for {{ r.name }}">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4v16M7 4L3 8M7 4l4 4M17 20V4M17 20l-4-4M17 20l4-4"/></svg>
+            </a>
+            {{ m.delete_button(r, request.full_path.rstrip('?')) }}
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="9" class="empty">No items match your search or filters.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  <div class="table-foot">
+    <span class="muted small">Page {{ paging.page }} of {{ paging.pages }}</span>
+    {{ m.pager(paging) }}
+  </div>
+</section>
+{% endblock %}

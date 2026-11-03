@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}Dashboard{% endblock %} · Inventory Stock Tracker</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+<div class="app-shell">
+
+  {# ---------- Sidebar ---------- #}
+  <aside class="sidebar" id="sidebar">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg>
+      </span>
+      <span class="brand-text">Inventory<br><strong>Stock Tracker</strong></span>
+    </div>
+
+    {% set page = request.endpoint %}
+    <nav class="nav" aria-label="Main">
+      <a href="{{ url_for('dashboard') }}" class="{{ 'active' if page == 'dashboard' }}">
+        <svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></svg>
+        Dashboard</a>
+      <a href="{{ url_for('inventory') }}" class="{{ 'active' if page == 'inventory' }}">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        All Inventory</a>
+      <a href="{{ url_for('add_item') }}" class="{{ 'active' if page == 'add_item' }}">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 8v8M8 12h8"/></svg>
+        Add Item</a>
+      <a href="{{ url_for('update_stock') }}" class="{{ 'active' if page == 'update_stock' }}">
+        <svg viewBox="0 0 24 24"><path d="M7 4v16M7 4L3 8M7 4l4 4M17 20V4M17 20l-4-4M17 20l4-4"/></svg>
+        Update Stock</a>
+      <a href="{{ url_for('low_stock') }}" class="{{ 'active' if page == 'low_stock' }}">
+        <svg viewBox="0 0 24 24"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v5M12 18v.01"/></svg>
+        Low Stock Alerts</a>
+      <a href="{{ url_for('reports') }}" class="{{ 'active' if page == 'reports' }}">
+        <svg viewBox="0 0 24 24"><path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/></svg>
+        Reports</a>
+    </nav>
+
+    <div class="sidebar-foot">
+      <span class="dot"></span> Data file<br><strong>{{ excel_name }}</strong>
+    </div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+
+  {# ---------- Main area ---------- #}
+  <div class="main">
+    <header class="topbar">
+      <button class="menu-btn" id="menuBtn" aria-label="Open menu" aria-controls="sidebar">
+        <svg viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+      </button>
+      <form class="top-search" action="{{ url_for('inventory') }}" method="get" role="search">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/></svg>
+        <input type="search" name="q" placeholder="Search by ID, name, category, brand or supplier…"
+               aria-label="Search inventory" value="{{ q if q is defined else '' }}">
+      </form>
+      <a href="{{ url_for('add_item') }}" class="btn btn-primary btn-compact">+ Add Item</a>
+    </header>
+
+    <main class="content">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+        <div class="flashes" role="status">
+          {% for category, message in messages %}
+            <div class="flash flash-{{ category }}">
+              <span>{{ message }}</span>
+              <button type="button" class="flash-close" aria-label="Dismiss">×</button>
+            </div>
+          {% endfor %}
+        </div>
+        {% endif %}
+      {% endwith %}
+
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+</div>
+
+{# ---------- Delete confirmation dialog (used by every Delete button) ---------- #}
+<div class="modal" id="deleteModal" hidden>
+  <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="deleteTitle">
+    <h2 id="deleteTitle">Delete this item?</h2>
+    <p><strong id="deleteName"></strong> (<span id="deleteId"></span>) will be permanently removed from the Excel file.
+       This cannot be undone.</p>
+    <div class="modal-actions">
+      <button type="button" class="btn btn-ghost" id="deleteCancel">Cancel</button>
+      <button type="button" class="btn btn-danger" id="deleteConfirm">Yes, delete</button>
+    </div>
+  </div>
+</div>
+
+<script src="{{ url_for('static', filename='js/script.js') }}"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

@@ -1,0 +1,110 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Reports{% endblock %}
+
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>Inventory Reports</h1>
+    <p class="sub">Download any report as an Excel file, or export everything at once.</p>
+  </div>
+  <a class="btn btn-primary" href="{{ url_for('export_report', kind='all') }}">Export all reports</a>
+</div>
+
+{# ---- Total valuation ---- #}
+<section class="cards cards-3">
+  <div class="stat-card accent">
+    <div><p class="stat-label">Total inventory valuation</p>
+      <p class="stat-value">{{ stats.total_value|inr }}</p></div>
+  </div>
+  <div class="stat-card"><div><p class="stat-label">Items</p><p class="stat-value">{{ stats.total_items|num }}</p></div></div>
+  <div class="stat-card"><div><p class="stat-label">Total quantity</p><p class="stat-value">{{ stats.total_qty|num }}</p></div></div>
+</section>
+
+{# ---- Category-wise inventory and value ---- #}
+<section class="card flush">
+  <div class="card-head pad">
+    <h2>Category-wise inventory &amp; stock value</h2>
+    <a class="btn btn-ghost btn-small" href="{{ url_for('export_report', kind='category') }}">Export</a>
+  </div>
+  <div class="report-split">
+    <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>Category</th><th class="num">Items</th><th class="num">Total Qty</th><th class="num">Stock Value</th><th class="num">Share</th><th class="num">At/below reorder</th></tr></thead>
+        <tbody>
+        {% for c in categories %}
+          <tr>
+            <td class="strong">{{ c.category }}</td>
+            <td class="num">{{ c['items']|num }}</td>
+            <td class="num">{{ c.qty|num }}</td>
+            <td class="num">{{ c['value']|inr }}</td>
+            <td class="num">{{ '%.1f'|format(c['value'] / stats.total_value * 100 if stats.total_value else 0) }}%</td>
+            <td class="num">{% if c.needs_reorder %}<span class="badge badge-reorder">{{ c.needs_reorder }}</span>{% else %}<span class="muted">0</span>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+        <tfoot>
+          <tr><td>Total</td><td class="num">{{ stats.total_items|num }}</td><td class="num">{{ stats.total_qty|num }}</td><td class="num">{{ stats.total_value|inr }}</td><td class="num">100%</td><td></td></tr>
+        </tfoot>
+      </table>
+    </div>
+    <div class="report-chart">
+      <h3>Value by category</h3>
+      <div id="reportChart" class="hbars" role="img" aria-label="Stock value by category"></div>
+    </div>
+  </div>
+</section>
+
+{# ---- Low stock report ---- #}
+<section class="card flush">
+  <div class="card-head pad">
+    <h2>Low-stock report <span class="muted">({{ low_items|length }})</span></h2>
+    <a class="btn btn-ghost btn-small" href="{{ url_for('export_report', kind='low_stock') }}">Export</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Item ID</th><th>Item Name</th><th>Category</th><th class="num">Qty</th><th class="num">Reorder Level</th><th>Supplier</th></tr></thead>
+      <tbody>
+      {% for r in low_items %}
+        <tr class="row-{{ r.status|badge }}">
+          <td class="mono">{{ r.item_id }}</td><td>{{ r.name }}</td><td>{{ r.category }}</td>
+          <td class="num strong">{{ r.qty|num }}</td><td class="num">{{ r.reorder|num }}</td><td>{{ r.supplier }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">No low-stock items.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+{# ---- Out of stock report ---- #}
+<section class="card flush">
+  <div class="card-head pad">
+    <h2>Out-of-stock report <span class="muted">({{ out_items|length }})</span></h2>
+    <a class="btn btn-ghost btn-small" href="{{ url_for('export_report', kind='out_of_stock') }}">Export</a>
+  </div>
+  <div class="table-wrap">
+    <table class="table">
+      <thead><tr><th>Item ID</th><th>Item Name</th><th>Category</th><th>Supplier</th><th>Warehouse</th><th>Last Received</th></tr></thead>
+      <tbody>
+      {% for r in out_items %}
+        <tr class="row-badge-out">
+          <td class="mono">{{ r.item_id }}</td><td>{{ r.name }}</td><td>{{ r.category }}</td>
+          <td>{{ r.supplier }}</td><td>{{ r.warehouse }}</td><td>{{ r.received|fdate }}</td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="empty">Nothing is out of stock.</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  const chartData = {{ chart_data|tojson }};
+  drawBars("reportChart", chartData.categories, {money: true});
+</script>
+{% endblock %}
