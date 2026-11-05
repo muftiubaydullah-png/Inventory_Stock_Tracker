@@ -39,6 +39,13 @@
       {{ m.field_error(errors, 'category') }}
     </div>
 
+    <div class="field span-2 {{ 'has-error' if errors.get('spec') }}">
+      <label for="spec">Specification / Rating <span class="muted small">(Optional)</span></label>
+      <input type="text" id="spec" name="spec" value="{{ form.get('spec', '') }}" maxlength="100"
+             placeholder="e.g. 10k ohm, 0.25W, 5% tolerance" autocomplete="off">
+      {{ m.field_error(errors, 'spec') }}
+    </div>
+
     <div class="field {{ 'has-error' if errors.get('brand') }}">
       <label for="brand">Brand <span class="req" aria-hidden="true">*</span></label>
       <input type="text" id="brand" name="brand" value="{{ form.get('brand', '') }}" maxlength="60"
@@ -115,11 +122,11 @@
 
   {# Section 4: Collapsible Optional & Smart Defaults #}
   <details class="optional-accordion" id="optionalAccordion"
-           {% if errors.get('spec') or errors.get('reorder') or errors.get('min_stock') or errors.get('max_stock') or errors.get('bin') or errors.get('received') or errors.get('remarks') %}open{% endif %}>
+           {% if errors.get('reorder') or errors.get('min_stock') or errors.get('max_stock') or errors.get('bin') or errors.get('received') or errors.get('remarks') %}open{% endif %}>
     <summary class="accordion-summary">
       <div class="summary-left">
         <span class="gear-icon" aria-hidden="true">⚙️</span>
-        <span class="summary-title">Additional Specifications &amp; Stock Levels</span>
+        <span class="summary-title">Additional Settings &amp; Stock Levels</span>
         <span class="pill-badge">Optional · Defaults pre-set</span>
       </div>
       <span class="chevron" aria-hidden="true">▾</span>
@@ -132,13 +139,6 @@
       </p>
 
       <div class="form-grid compact-grid">
-        <div class="field {{ 'has-error' if errors.get('spec') }}">
-          <label for="spec">Specification / Rating <span class="muted small">(Optional)</span></label>
-          <input type="text" id="spec" name="spec" value="{{ form.get('spec', '') }}" maxlength="100"
-                 placeholder="e.g. 10k ohm, 0.25W, 5% tolerance" autocomplete="off">
-          {{ m.field_error(errors, 'spec') }}
-        </div>
-
         <div class="field {{ 'has-error' if errors.get('bin') }}">
           <label for="bin">Bin Location <span class="muted small">(Default: Not Assigned)</span></label>
           <input type="text" id="bin" name="bin" value="{{ form.get('bin', 'Not Assigned') }}" maxlength="30"

@@ -287,8 +287,139 @@ class ExcelHandler:
 
 
 # ----------------------------------------------------------------------
-# Report export
+# Report export & Inventory export
 # ----------------------------------------------------------------------
+def build_inventory_export(df, file_paths=None):
+    """
+    Create an Excel workbook in memory containing all current inventory records directly from MySQL.
+    Exports all 18 standard columns with professional formatting and a Summary sheet.
+    Optionally saves copies to disk (e.g. inventory_updated.xlsx).
+    """
+    buffer = BytesIO()
+    header_fill = PatternFill("solid", fgColor="0F6B78")
+    summary_header_fill = PatternFill("solid", fgColor="1E293B")
+    
+    col_mapping = [
+        ("item_id", "Item ID"),
+        ("name", "Item Name"),
+        ("category", "Category"),
+        ("spec", "Specification / Rating"),
+        ("brand", "Brand"),
+        ("unit", "Unit"),
+        ("qty", "Quantity in Stock"),
+        ("reorder", "Reorder Level"),
+        ("min_stock", "Minimum Stock"),
+        ("max_stock", "Maximum Stock"),
+        ("cost", "Unit Cost (INR)"),
+        ("value", "Stock Value (INR)"),
+        ("supplier", "Supplier"),
+        ("warehouse", "Warehouse"),
+        ("bin", "Bin Location"),
+        ("status", "Stock Status"),
+        ("received", "Last Received Date"),
+        ("remarks", "Remarks"),
+    ]
+    export_slugs = [c[0] for c in col_mapping]
+    rename_dict = dict(col_mapping)
+    
+    work_df = df.copy()
+    for slug in export_slugs:
+        if slug not in work_df.columns:
+            work_df[slug] = ""
+        elif slug in ("spec", "remarks"):
+            work_df[slug] = work_df[slug].fillna("")
+    
+    export_df = work_df[export_slugs].rename(columns=rename_dict)
+    
+    # Summary DataFrame
+    total_records = len(df)
+    total_qty = int(df["qty"].sum()) if not df.empty else 0
+    total_val = round(float(df["value"].sum()), 2) if not df.empty else 0.0
+    status_series = df["status"] if not df.empty else pd.Series(dtype=object)
+    
+    summary_data = [
+        ("Total inventory records", total_records),
+        ("Total quantity across all items", total_qty),
+        ("Total stock value (INR)", total_val),
+        ("Items in stock", int((status_series == STATUS_OK).sum())),
+        ("Items requiring reorder", int((status_series == STATUS_REORDER).sum())),
+        ("Items with low stock", int((status_series == STATUS_LOW).sum())),
+        ("Items out of stock", int((status_series == STATUS_OUT).sum())),
+        ("Data source", "MySQL Server 8.0 (inventory_tracker)"),
+        ("Exported on", pd.Timestamp.now().strftime("%d-%b-%Y %I:%M %p")),
+    ]
+    summary_df = pd.DataFrame(summary_data, columns=["Inventory Metric", "Value"])
+
+    with pd.ExcelWriter(buffer, engine="openpyxl") as writer:
+        # Sheet 1: Inventory
+        export_df.to_excel(writer, sheet_name=PREFERRED_SHEET, index=False)
+        ws_inv = writer.sheets[PREFERRED_SHEET]
+        ws_inv.freeze_panes = "A2"
+        ws_inv.row_dimensions[1].height = 26
+        
+        for idx, title in enumerate(export_df.columns, start=1):
+            head = ws_inv.cell(row=1, column=idx)
+            head.font = Font(bold=True, color="FFFFFF", size=11)
+            head.fill = header_fill
+            head.alignment = Alignment(vertical="center", horizontal="center" if idx in (1, 6, 7, 8, 9, 10, 16, 17) else "left")
+            
+            # Auto width
+            vals = [str(title)] + [str(v) for v in export_df.iloc[:, idx - 1].dropna().head(200)]
+            longest = max(len(v) for v in vals) if vals else 10
+            ws_inv.column_dimensions[get_column_letter(idx)].width = min(max(13, longest + 3), 45)
+            
+            # Cell number formatting
+            col_letter = get_column_letter(idx)
+            if "INR" in str(title):
+                for row in range(2, len(export_df) + 2):
+                    ws_inv[f"{col_letter}{row}"].number_format = '"₹"#,##0.00'
+            elif "Quantity" in str(title) or "Stock" in str(title) or "Level" in str(title):
+                for row in range(2, len(export_df) + 2):
+                    ws_inv[f"{col_letter}{row}"].number_format = '#,##0'
+            elif "Date" in str(title):
+                for row in range(2, len(export_df) + 2):
+                    ws_inv[f"{col_letter}{row}"].number_format = 'YYYY-MM-DD'
+        
+        # Apply AutoFilter
+        last_row = max(len(export_df) + 1, 2)
+        last_col = get_column_letter(len(export_df.columns))
+        ws_inv.auto_filter.ref = f"A1:{last_col}{last_row}"
+
+        # Sheet 2: Summary
+        summary_df.to_excel(writer, sheet_name=SUMMARY_SHEET, index=False)
+        ws_sum = writer.sheets[SUMMARY_SHEET]
+        ws_sum.freeze_panes = "A2"
+        ws_sum.row_dimensions[1].height = 24
+        
+        for idx in range(1, 3):
+            head = ws_sum.cell(row=1, column=idx)
+            head.font = Font(bold=True, color="FFFFFF", size=11)
+            head.fill = summary_header_fill
+            head.alignment = Alignment(vertical="center")
+        
+        ws_sum.column_dimensions["A"].width = 36
+        ws_sum.column_dimensions["B"].width = 30
+        
+        # Format currency row on summary
+        val_cell = ws_sum.cell(row=4, column=2)
+        val_cell.number_format = '"₹"#,##0.00'
+
+    raw_bytes = buffer.getvalue()
+    
+    # Save copies to disk if requested
+    if file_paths:
+        for p in file_paths:
+            if p:
+                try:
+                    with open(p, "wb") as f:
+                        f.write(raw_bytes)
+                except Exception:
+                    pass
+                    
+    buffer.seek(0)
+    return buffer
+
+
 def build_report_workbook(sheets):
     """
     Create an .xlsx file in memory from {sheet_name: DataFrame}.

@@ -3,8 +3,8 @@ Inventory Stock Tracker - Flask application
 -------------------------------------------
 Run with:   python app.py      then open http://127.0.0.1:5000
 
-All data lives in the Excel file (inventory.xlsx by default).
-To use a different file, set the INVENTORY_FILE environment variable (see README).
+Data storage: MySQL Server 8.0 database (inventory_tracker).
+Configured via environment variables in .env.
 """
 
 import os
@@ -14,19 +14,23 @@ from datetime import date, datetime
 import pandas as pd
 from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_file, url_for)
+from dotenv import load_dotenv
+
+# Ensure environment variables are loaded
+load_dotenv()
 
 from utils import inventory_logic as logic
-from utils.excel_handler import ExcelError, ExcelHandler, build_report_workbook
+from utils.db_handler import DBHandler, DatabaseError
+from utils.excel_handler import ExcelError, build_inventory_export, build_report_workbook
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-EXCEL_PATH = os.environ.get("INVENTORY_FILE") or os.path.join(BASE_DIR, "inventory.xlsx")
 
 app = Flask(__name__)
-# Needed for flash messages. Change it if you ever put this app on a shared server.
+# Needed for flash messages.
 app.secret_key = os.environ.get("SECRET_KEY", "inventory-stock-tracker-local-key")
 
-excel = ExcelHandler(EXCEL_PATH)
-excel.ensure_backup()
+# Database handler: automatically ensures database and tables exist
+db = DBHandler()
 
 PER_PAGE_CHOICES = [10, 25, 50, 100]
 UNIT_FALLBACK = ["Nos", "Box", "Pack", "Set", "Roll", "Mtr"]
@@ -81,7 +85,13 @@ def num(value):
 def fdate(value):
     if value is None or pd.isna(value):
         return "—"
-    return value.strftime("%d-%b-%Y")
+    if hasattr(value, "strftime"):
+        return value.strftime("%d-%b-%Y")
+    try:
+        dt = pd.to_datetime(value)
+        return dt.strftime("%d-%b-%Y")
+    except Exception:
+        return str(value)
 
 
 @app.template_filter("badge")
@@ -105,28 +115,52 @@ def qs(**overrides):
 
 @app.context_processor
 def inject_globals():
-    return {"today": date.today().isoformat(), "excel_name": os.path.basename(EXCEL_PATH)}
+    return {
+        "today": date.today().isoformat(),
+        "db_name": db.db_name,
+        "excel_name": f"MySQL: {db.db_name}"
+    }
 
 
 # ---------------------------------------------------------------------------
 # Error pages
 # ---------------------------------------------------------------------------
+@app.errorhandler(DatabaseError)
+def handle_database_error(error):
+    return render_template(
+        "error.html",
+        title="Database Connection Problem",
+        message=str(error),
+        db_problem=True
+    ), 500
+
+
 @app.errorhandler(ExcelError)
 def handle_excel_error(error):
-    return render_template("error.html", title="Excel file problem", message=str(error),
-                           excel_problem=True), 500
+    return render_template(
+        "error.html",
+        title="File problem",
+        message=str(error),
+        excel_problem=True
+    ), 500
 
 
 @app.errorhandler(404)
 def handle_not_found(error):
-    return render_template("error.html", title="Page not found",
-                           message="That page or item does not exist."), 404
+    return render_template(
+        "error.html",
+        title="Page not found",
+        message="That page or item does not exist."
+    ), 404
 
 
 @app.errorhandler(500)
 def handle_server_error(error):
-    return render_template("error.html", title="Something went wrong",
-                           message="An unexpected error occurred. Check the terminal for details."), 500
+    return render_template(
+        "error.html",
+        title="Something went wrong",
+        message="An unexpected error occurred. Check the terminal for details."
+    ), 500
 
 
 def safe_next(target, fallback):
@@ -141,14 +175,15 @@ def safe_next(target, fallback):
 # ---------------------------------------------------------------------------
 @app.route("/")
 def dashboard():
-    df = excel.read()
-    stats = logic.dashboard_stats(df)
-    categories = logic.category_summary(df)
-    urgent = logic.alert_items(df, "all").head(8).to_dict("records")
+    stats = db.get_dashboard_stats()
+    categories = db.get_category_summary()
+    urgent = db.get_alert_items(level="all", limit=8)
     chart_data = {
-        "status": logic.status_distribution(df),
-        "categories": [{"label": r.category, "value": float(r.value)}
-                       for r in categories.head(8).itertuples()],
+        "status": db.get_status_distribution(),
+        "categories": [
+            {"label": r["category"], "value": float(r["value"])}
+            for r in categories[:8]
+        ],
     }
     return render_template("dashboard.html", stats=stats, urgent=urgent, chart_data=chart_data)
 
@@ -158,7 +193,6 @@ def dashboard():
 # ---------------------------------------------------------------------------
 @app.route("/inventory")
 def inventory():
-    df = excel.read()
     query = request.args.get("q", "").strip()
     category = request.args.get("category", "")
     status = request.args.get("status", "")
@@ -168,64 +202,47 @@ def inventory():
     per_page = per_page if per_page in PER_PAGE_CHOICES else 25
     page = request.args.get("page", 1, type=int)
 
-    categories = sorted(df["category"].unique())
-    result = logic.filter_items(df, query, category, status)
-    result = logic.sort_items(result, sort, order)
-    rows, paging = logic.paginate(result, page, per_page)
+    options = db.get_form_options()
+    categories = options.get("categories", [])
+    rows, paging, filtered_total = db.search_and_filter(
+        query=query, category=category, status=status,
+        sort=sort, order=order, page=page, per_page=per_page
+    )
 
     return render_template(
         "inventory.html", rows=rows, paging=paging, categories=categories,
         statuses=[logic.STATUS_OK, logic.STATUS_LOW, logic.STATUS_REORDER, logic.STATUS_OUT],
         q=query, category=category, status=status, sort=sort, order=order,
         per_page=per_page, per_page_choices=PER_PAGE_CHOICES,
-        filtered_total=int(result["value"].sum()) if len(result) else 0,
+        filtered_total=filtered_total,
     )
 
 
 @app.route("/api/items/search")
 def api_item_search():
     """Small JSON endpoint used by the Update Stock search box."""
-    df = excel.read()
-    matches = logic.search_items(df, request.args.get("q", ""))
-    matches = matches.sort_values("item_id").head(8)
-    return jsonify([
-        {"item_id": r.item_id, "name": r.name, "brand": r.brand,
-         "qty": int(r.qty), "unit": r.unit, "status": r.status}
-        for r in matches.itertuples()
-    ])
+    matches = db.api_search_items(request.args.get("q", ""), limit=8)
+    return jsonify(matches)
 
 
 # ---------------------------------------------------------------------------
 # 4. Add new item
 # ---------------------------------------------------------------------------
-def _form_options(df):
-    """Suggestions for the drop-downs / auto-complete lists on the Add Item form."""
-    return {
-        "categories": sorted(df["category"].unique()),
-        "brands": sorted(df["brand"].unique()),
-        "suppliers": sorted(df["supplier"].unique()),
-        "warehouses": sorted(df["warehouse"].unique()),
-        "units": sorted(df["unit"].unique()) or UNIT_FALLBACK,
-    }
-
-
 @app.route("/add", methods=["GET", "POST"])
 def add_item():
-    df = excel.read()
     errors, form = {}, {}
+    options = db.get_form_options()
 
     if request.method == "POST":
         form = request.form.to_dict()
         record, errors = logic.validate_new_item(form)
         if not errors:
             try:
-                with excel.lock:  # read -> generate ID -> write must not be interrupted
-                    df = excel.read()
-                    record["item_id"] = logic.next_item_id(df)
-                    excel.add_item(record)
+                record["item_id"] = db.next_item_id()
+                db.add_item(record)
                 flash(f"Added {record['name']} ({record['item_id']}) successfully.", "success")
                 return redirect(url_for("inventory"))
-            except ExcelError as exc:
+            except DatabaseError as exc:
                 flash(str(exc), "error")
         else:
             flash("Please fix the highlighted fields.", "error")
@@ -239,8 +256,13 @@ def add_item():
             "received": date.today().isoformat(),
         }
 
-    return render_template("add_item.html", next_id=logic.next_item_id(df), form=form,
-                           errors=errors, **_form_options(df))
+    return render_template(
+        "add_item.html",
+        next_id=db.next_item_id(),
+        form=form,
+        errors=errors,
+        **options
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -248,29 +270,35 @@ def add_item():
 # ---------------------------------------------------------------------------
 @app.route("/edit/<item_id>", methods=["GET", "POST"])
 def edit_item(item_id):
-    df = excel.read()
-    item_id_str = str(item_id).strip()
-    found = df[df["item_id"].str.lower() == item_id_str.lower()]
-    if found.empty:
+    item = db.get_item(item_id)
+    if not item:
         flash(f"Item '{item_id}' was not found.", "error")
         return redirect(url_for("inventory"))
 
-    item = found.iloc[0].to_dict()
     errors, form = {}, {}
+    options = db.get_form_options()
 
     if request.method == "POST":
         form = request.form.to_dict()
         record, errors = logic.validate_edit_item(form)
         if not errors:
             try:
-                excel.update_item(item["item_id"], record)
+                db.update_item(item["item_id"], record)
                 flash(f"Updated {record['name']} ({item['item_id']}) successfully.", "success")
                 return redirect(url_for("inventory"))
-            except ExcelError as exc:
+            except DatabaseError as exc:
                 flash(str(exc), "error")
         else:
             flash("Please fix the highlighted fields.", "error")
     else:
+        rec_val = item.get("received")
+        if isinstance(rec_val, (date, datetime)):
+            received_str = rec_val.strftime("%Y-%m-%d")
+        elif rec_val:
+            received_str = str(rec_val)[:10]
+        else:
+            received_str = date.today().isoformat()
+
         form = {
             "name": item.get("name", ""),
             "category": item.get("category", ""),
@@ -286,7 +314,7 @@ def edit_item(item_id):
             "warehouse": item.get("warehouse", ""),
             "bin": item.get("bin", "Not Assigned"),
             "remarks": item.get("remarks", ""),
-            "received": item["received"].strftime("%Y-%m-%d") if pd.notna(item.get("received")) else date.today().isoformat(),
+            "received": received_str,
         }
 
     return render_template(
@@ -294,7 +322,7 @@ def edit_item(item_id):
         item=item,
         form=form,
         errors=errors,
-        **_form_options(df)
+        **options
     )
 
 
@@ -303,17 +331,12 @@ def edit_item(item_id):
 # ---------------------------------------------------------------------------
 @app.route("/update-stock", methods=["GET", "POST"])
 def update_stock():
-    df = excel.read()
     item_id = (request.values.get("item_id") or "").strip()
     action = request.form.get("action", "in")
-    item = None
+    item = db.get_item(item_id) if item_id else None
 
-    if item_id:
-        found = df[df["item_id"].str.lower() == item_id.lower()]
-        if found.empty:
-            flash(f"No item found with ID '{item_id}'.", "error")
-        else:
-            item = found.iloc[0].to_dict()
+    if item_id and not item:
+        flash(f"No item found with ID '{item_id}'.", "error")
 
     if request.method == "POST" and item:
         new_qty, error = logic.apply_stock_change(item["qty"], action, request.form.get("quantity", ""))
@@ -321,15 +344,15 @@ def update_stock():
             flash(error, "error")
         else:
             try:
-                received = datetime.combine(date.today(), datetime.min.time()) if action == "in" else None
-                excel.update_quantity(item["item_id"], new_qty, received)
+                received = date.today() if action == "in" else None
+                db.update_quantity(item["item_id"], new_qty, received)
                 verb = "added to" if action == "in" else "removed from"
                 amount = abs(new_qty - item["qty"])
                 flash(f"{amount} {item['unit']} {verb} {item['name']}. New stock: {new_qty}.", "success")
                 if action == "in" and new_qty > item["max_stock"]:
                     flash(f"Note: stock is now above the maximum level of {item['max_stock']}.", "warning")
                 return redirect(url_for("update_stock", item_id=item["item_id"]))
-            except ExcelError as exc:
+            except DatabaseError as exc:
                 flash(str(exc), "error")
 
     return render_template("update_stock.html", item=item, item_id=item_id, action=action)
@@ -340,18 +363,17 @@ def update_stock():
 # ---------------------------------------------------------------------------
 @app.route("/delete/<item_id>", methods=["POST"])
 def delete_item(item_id):
-    df = excel.read()
-    found = df[df["item_id"].str.lower() == item_id.lower()]
+    item = db.get_item(item_id)
     destination = safe_next(request.form.get("next"), url_for("inventory"))
-    if found.empty:
+    if not item:
         flash(f"Item {item_id} was not found.", "error")
         return redirect(destination)
-    name = found.iloc[0]["name"]
-    canonical_item_id = found.iloc[0]["item_id"]
+    name = item["name"]
+    canonical_item_id = item["item_id"]
     try:
-        excel.delete_item(canonical_item_id)
-        flash(f"Deleted {item_id} ({name}).", "success")
-    except ExcelError as exc:
+        db.delete_item(canonical_item_id)
+        flash(f"Deleted {canonical_item_id} ({name}).", "success")
+    except DatabaseError as exc:
         flash(str(exc), "error")
     return redirect(destination)
 
@@ -361,17 +383,11 @@ def delete_item(item_id):
 # ---------------------------------------------------------------------------
 @app.route("/low-stock")
 def low_stock():
-    df = excel.read()
     level = request.args.get("level", "all")
     if level not in ("all", "out", "reorder", "watch"):
         level = "all"
-    items = logic.alert_items(df, level).to_dict("records")
-    counts = {
-        "all": int((df["qty"] <= df["reorder"]).sum()),
-        "out": int((df["status"] == logic.STATUS_OUT).sum()),
-        "reorder": int((df["status"] == logic.STATUS_REORDER).sum()),
-        "watch": int((df["status"] == logic.STATUS_LOW).sum()),
-    }
+    items = db.get_alert_items(level=level)
+    counts = db.get_alert_counts()
     return render_template("low_stock.html", items=items, level=level, counts=counts)
 
 
@@ -380,16 +396,25 @@ def low_stock():
 # ---------------------------------------------------------------------------
 @app.route("/reports")
 def reports():
-    df = excel.read()
-    stats = logic.dashboard_stats(df)
-    categories = logic.category_summary(df)
-    low = logic.alert_items(df, "all")
-    low_only = low[low["status"] != logic.STATUS_OUT].to_dict("records")
-    out = df[df["status"] == logic.STATUS_OUT].sort_values("item_id").to_dict("records")
-    chart_data = {"categories": [{"label": r.category, "value": float(r.value)}
-                                 for r in categories.itertuples()]}
-    return render_template("reports.html", stats=stats, categories=categories.to_dict("records"),
-                           low_items=low_only, out_items=out, chart_data=chart_data)
+    stats = db.get_dashboard_stats()
+    categories = db.get_category_summary()
+    low_items = db.get_alert_items(level="all")
+    low_only = [r for r in low_items if r["status"] != logic.STATUS_OUT]
+    out_items = [r for r in low_items if r["status"] == logic.STATUS_OUT]
+    chart_data = {
+        "categories": [
+            {"label": r["category"], "value": float(r["value"])}
+            for r in categories
+        ]
+    }
+    return render_template(
+        "reports.html",
+        stats=stats,
+        categories=categories,
+        low_items=low_only,
+        out_items=out_items,
+        chart_data=chart_data
+    )
 
 
 def _report_sheets(df, kind):
@@ -422,15 +447,44 @@ def _alert_frame(frame):
     return frame[cols].rename(columns=dict(zip(cols, names)))
 
 
+@app.route("/export/inventory")
+@app.route("/export-excel")
+def export_inventory_excel():
+    """
+    Fetch all current inventory records directly from MySQL
+    and export into an Excel file named inventory_updated.xlsx.
+    """
+    df = db.get_all_dataframe()
+    if df.empty:
+        flash("No inventory records found in MySQL database to export.", "warning")
+        return redirect(url_for("dashboard"))
+
+    export_path = os.path.join(BASE_DIR, "inventory_updated.xlsx")
+    root_export_path = os.path.join(os.path.dirname(BASE_DIR), "inventory_updated.xlsx")
+
+    buffer = build_inventory_export(df, file_paths=[export_path, root_export_path])
+    filename = "inventory_updated.xlsx"
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+
+
 @app.route("/reports/export/<kind>")
 def export_report(kind):
     if kind not in ("all", "category", "low_stock", "out_of_stock"):
         abort(404)
-    df = excel.read()
+    df = db.get_all_dataframe()
     buffer = build_report_workbook(_report_sheets(df, kind))
     filename = f"inventory_report_{kind}_{date.today():%Y%m%d}.xlsx"
-    return send_file(buffer, as_attachment=True, download_name=filename,
-                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return send_file(
+        buffer,
+        as_attachment=True,
+        download_name=filename,
+        mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
 
 
 if __name__ == "__main__":

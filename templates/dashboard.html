@@ -8,43 +8,82 @@
     <h1>Dashboard</h1>
     <p class="sub">A live summary of your electronics inventory.</p>
   </div>
-  <a class="btn btn-ghost" href="{{ url_for('export_report', kind='all') }}">Export full report</a>
+  <div class="page-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
+    <a class="btn btn-primary" href="{{ url_for('export_inventory_excel') }}"
+      title="Fetch latest inventory records from MySQL and download inventory_updated.xlsx">
+      <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"
+        style="margin-right: 6px; vertical-align: text-bottom;">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+        <polyline points="7 10 12 15 17 10"></polyline>
+        <line x1="12" y1="15" x2="12" y2="3"></line>
+      </svg>
+      Export to Excel
+    </a>
+    <a class="btn btn-ghost" href="{{ url_for('export_report', kind='all') }}">Export full report</a>
+  </div>
 </div>
 
 {# ---- Headline numbers ---- #}
 <section class="cards cards-3">
   <div class="stat-card">
-    <span class="stat-icon teal"><svg viewBox="0 0 24 24"><path d="M21 8l-9-5-9 5v8l9 5 9-5V8z"/><path d="M3 8l9 5 9-5M12 13v8"/></svg></span>
-    <div><p class="stat-label">Total inventory items</p><p class="stat-value">{{ stats.total_items|num }}</p></div>
+    <span class="stat-icon teal"><svg viewBox="0 0 24 24">
+        <path d="M21 8l-9-5-9 5v8l9 5 9-5V8z" />
+        <path d="M3 8l9 5 9-5M12 13v8" />
+      </svg></span>
+    <div>
+      <p class="stat-label">Total inventory items</p>
+      <p class="stat-value">{{ stats.total_items|num }}</p>
+    </div>
   </div>
   <div class="stat-card">
-    <span class="stat-icon blue"><svg viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span>
-    <div><p class="stat-label">Total quantity in stock</p><p class="stat-value">{{ stats.total_qty|num }}</p></div>
+    <span class="stat-icon blue"><svg viewBox="0 0 24 24">
+        <path d="M4 7h16M4 12h16M4 17h10" />
+      </svg></span>
+    <div>
+      <p class="stat-label">Total quantity in stock</p>
+      <p class="stat-value">{{ stats.total_qty|num }}</p>
+    </div>
   </div>
   <div class="stat-card">
-    <span class="stat-icon violet"><svg viewBox="0 0 24 24"><path d="M6 4h12M6 9h12M9 4c5 0 7 2 7 5s-2 5-7 5h-3l8 6"/></svg></span>
-    <div><p class="stat-label">Total inventory value</p>
-      <p class="stat-value" title="{{ stats.total_value|inr }}">{{ stats.total_value|inr_short }}</p></div>
+    <span class="stat-icon violet"><svg viewBox="0 0 24 24">
+        <path d="M6 4h12M6 9h12M9 4c5 0 7 2 7 5s-2 5-7 5h-3l8 6" />
+      </svg></span>
+    <div>
+      <p class="stat-label">Total inventory value</p>
+      <p class="stat-value" title="{{ stats.total_value|inr }}">{{ stats.total_value|inr_short }}</p>
+    </div>
   </div>
 </section>
 
 {# ---- Status cards (each one opens the matching filtered list) ---- #}
 <section class="cards cards-4">
   <a class="stat-card stat-link ok" href="{{ url_for('inventory', status='In Stock') }}">
-    <div><p class="stat-label">Items in stock</p><p class="stat-value">{{ stats.in_stock|num }}</p>
-      <p class="stat-note">Healthy stock levels</p></div>
+    <div>
+      <p class="stat-label">Items in stock</p>
+      <p class="stat-value">{{ stats.in_stock|num }}</p>
+      <p class="stat-note">Healthy stock levels</p>
+    </div>
   </a>
   <a class="stat-card stat-link low" href="{{ url_for('inventory', status='Low Stock') }}">
-    <div><p class="stat-label">Low-stock items</p><p class="stat-value">{{ stats.low_stock|num }}</p>
-      <p class="stat-note">Running down, within 2× reorder level</p></div>
+    <div>
+      <p class="stat-label">Low-stock items</p>
+      <p class="stat-value">{{ stats.low_stock|num }}</p>
+      <p class="stat-note">Running down, within 2× reorder level</p>
+    </div>
   </a>
   <a class="stat-card stat-link reorder" href="{{ url_for('low_stock', level='reorder') }}">
-    <div><p class="stat-label">Items requiring reorder</p><p class="stat-value">{{ stats.reorder|num }}</p>
-      <p class="stat-note">At or below reorder level</p></div>
+    <div>
+      <p class="stat-label">Items requiring reorder</p>
+      <p class="stat-value">{{ stats.reorder|num }}</p>
+      <p class="stat-note">At or below reorder level</p>
+    </div>
   </a>
   <a class="stat-card stat-link out" href="{{ url_for('low_stock', level='out') }}">
-    <div><p class="stat-label">Out-of-stock items</p><p class="stat-value">{{ stats.out_of_stock|num }}</p>
-      <p class="stat-note">Zero quantity</p></div>
+    <div>
+      <p class="stat-label">Out-of-stock items</p>
+      <p class="stat-value">{{ stats.out_of_stock|num }}</p>
+      <p class="stat-note">Zero quantity</p>
+    </div>
   </a>
 </section>
 
@@ -72,9 +111,18 @@
   {% if urgent %}
   <div class="table-wrap">
     <table class="table">
-      <thead><tr><th>Item ID</th><th>Item Name</th><th class="num">Quantity</th><th class="num">Reorder Level</th><th>Supplier</th><th>Status</th></tr></thead>
+      <thead>
+        <tr>
+          <th>Item ID</th>
+          <th>Item Name</th>
+          <th class="num">Quantity</th>
+          <th class="num">Reorder Level</th>
+          <th>Supplier</th>
+          <th>Status</th>
+        </tr>
+      </thead>
       <tbody>
-      {% for r in urgent %}
+        {% for r in urgent %}
         <tr class="row-{{ r.status|badge }}">
           <td class="mono">{{ r.item_id }}</td>
           <td>{{ r.name }}</td>
@@ -83,7 +131,7 @@
           <td>{{ r.supplier }}</td>
           <td>{{ m.badge(r.status) }}</td>
         </tr>
-      {% endfor %}
+        {% endfor %}
       </tbody>
     </table>
   </div>
@@ -96,8 +144,8 @@
 {% block scripts %}
 <script>
   // Data prepared by Flask, drawn by the small chart helpers in script.js
-  const chartData = {{ chart_data|tojson }};
+  const chartData = {{ chart_data| tojson }};
   drawDonut("statusChart", "statusLegend", chartData.status);
-  drawBars("categoryChart", chartData.categories, {money: true});
+  drawBars("categoryChart", chartData.categories, { money: true });
 </script>
 {% endblock %}

@@ -6,7 +6,7 @@
 <div class="page-head">
   <div>
     <h1>Edit Item: <span class="mono">{{ item.item_id }}</span></h1>
-    <p class="sub">Update item details, stock thresholds, locations, and pricing. Changes update Excel immediately.</p>
+    <p class="sub">Update item details, stock thresholds, locations, and pricing. Changes update database immediately.</p>
   </div>
   <div class="page-head-badge">
     {{ m.badge(item.status) }}
@@ -43,6 +43,13 @@
       {{ m.field_error(errors, 'category') }}
     </div>
 
+    <div class="field span-2 {{ 'has-error' if errors.get('spec') }}">
+      <label for="spec">Specification / Rating <span class="muted small">(Optional)</span></label>
+      <input type="text" id="spec" name="spec" value="{{ form.get('spec', '') }}" maxlength="100"
+             placeholder="e.g. 10k ohm, 0.25W" autocomplete="off">
+      {{ m.field_error(errors, 'spec') }}
+    </div>
+
     <div class="field {{ 'has-error' if errors.get('brand') }}">
       <label for="brand">Brand <span class="req" aria-hidden="true">*</span></label>
       <input type="text" id="brand" name="brand" value="{{ form.get('brand', '') }}" maxlength="60"
@@ -57,13 +64,6 @@
         {% for u in units %}<option value="{{ u }}" {{ 'selected' if form.get('unit') == u }}>{{ u }}</option>{% endfor %}
       </select>
       {{ m.field_error(errors, 'unit') }}
-    </div>
-
-    <div class="field span-2 {{ 'has-error' if errors.get('spec') }}">
-      <label for="spec">Specification / Rating <span class="muted small">(Optional)</span></label>
-      <input type="text" id="spec" name="spec" value="{{ form.get('spec', '') }}" maxlength="100"
-             placeholder="e.g. 10k ohm, 0.25W" autocomplete="off">
-      {{ m.field_error(errors, 'spec') }}
     </div>
   </div>
 
