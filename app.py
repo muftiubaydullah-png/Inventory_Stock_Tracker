@@ -16,14 +16,20 @@ from flask import (Flask, abort, flash, jsonify, redirect, render_template,
                    request, send_file, url_for)
 from dotenv import load_dotenv
 
-# Ensure environment variables are loaded
-load_dotenv()
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# .env lives in the PROJECT ROOT (one level above Inventory_Stock_TrackerFF/)
+_root_dir = os.path.dirname(BASE_DIR)
+_env_file = os.path.join(_root_dir, ".env")
+if not os.path.isfile(_env_file):
+    # Fallback: check the app directory itself
+    _env_file = os.path.join(BASE_DIR, ".env")
+load_dotenv(_env_file, override=True)
 
 from utils import inventory_logic as logic
 from utils.db_handler import DBHandler, DatabaseError
 from utils.excel_handler import ExcelError, build_inventory_export, build_report_workbook
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 app = Flask(__name__)
 # Needed for flash messages.

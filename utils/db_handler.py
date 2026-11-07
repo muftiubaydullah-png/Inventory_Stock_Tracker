@@ -26,15 +26,19 @@ from .inventory_logic import (
     compute_status, compute_value, ID_PREFIX
 )
 
-# Search current directory and parent directory for .env
-load_dotenv()
-_base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-_env_path = os.path.join(_base_dir, ".env")
+# Resolve absolute path to .env in the project root
+# db_handler.py -> utils/ -> Inventory_Stock_TrackerFF/ -> Inventory_Stock_Tracker_FIXED/
+_this_file = os.path.abspath(__file__)
+_utils_dir = os.path.dirname(_this_file)           # .../utils/
+_app_dir = os.path.dirname(_utils_dir)             # .../Inventory_Stock_TrackerFF/
+_root_dir = os.path.dirname(_app_dir)              # .../Inventory_Stock_Tracker_FIXED/
+_env_path = os.path.join(_root_dir, ".env")
 if os.path.isfile(_env_path):
-    load_dotenv(_env_path)
-_parent_env = os.path.join(os.path.dirname(_base_dir), ".env")
-if os.path.isfile(_parent_env):
-    load_dotenv(_parent_env)
+    load_dotenv(_env_path, override=True)
+elif os.path.isfile(os.path.join(_app_dir, ".env")):
+    load_dotenv(os.path.join(_app_dir, ".env"), override=True)
+else:
+    load_dotenv(override=True)  # last-resort CWD fallback
 
 
 class DatabaseError(Exception):
