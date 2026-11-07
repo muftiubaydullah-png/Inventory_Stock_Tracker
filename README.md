@@ -1,4 +1,4 @@
-# Inventory Stock Tracker (MySQL Edition)
+# Inventory Stock Tracker:-
 
 A robust web-based inventory management system for electronic items, backed by **MySQL Server 8.0**. 
 
